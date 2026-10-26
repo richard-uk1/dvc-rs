@@ -2,7 +2,7 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io::{self, Cursor, Read, Write};
 
 /// Basic file attributes exposed by [`FileSystem::metadata`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,6 +26,24 @@ pub struct DirectoryEntry {
     pub is_dir: bool,
 }
 
+/// A file reader returned by [`FileSystem::open_read`].
+#[derive(Debug)]
+pub enum FileReader {
+    /// Reader for an operating-system file.
+    File(File),
+    /// Reader over in-memory file contents.
+    Memory(Cursor<Vec<u8>>),
+}
+
+impl Read for FileReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::File(file) => file.read(buf),
+            Self::Memory(cursor) => cursor.read(buf),
+        }
+    }
+}
+
 /// Abstraction over filesystem operations used by commands.
 ///
 /// Implementations return UTF-8 paths and report filesystem failures as
@@ -37,7 +55,7 @@ pub trait FileSystem {
     /// Read basic attributes for a path.
     fn metadata(&self, path: &Utf8Path) -> io::Result<FileMetadata>;
     /// Open a file for reading.
-    fn open_read(&self, path: &Utf8Path) -> io::Result<Box<dyn Read + Send>>;
+    fn open_read(&self, path: &Utf8Path) -> io::Result<FileReader>;
     /// Create a directory and any missing parent directories.
     fn create_dir_all(&self, path: &Utf8Path) -> io::Result<()>;
     /// Return whether a path exists.
@@ -72,8 +90,8 @@ impl FileSystem for StdFileSystem {
         })
     }
 
-    fn open_read(&self, path: &Utf8Path) -> io::Result<Box<dyn Read + Send>> {
-        Ok(Box::new(File::open(path)?))
+    fn open_read(&self, path: &Utf8Path) -> io::Result<FileReader> {
+        Ok(FileReader::File(File::open(path)?))
     }
 
     fn create_dir_all(&self, path: &Utf8Path) -> io::Result<()> {
@@ -135,7 +153,7 @@ pub(crate) mod mock {
     use super::{DirectoryEntry, FileMetadata, FileSystem};
     use camino::{Utf8Path, Utf8PathBuf};
     use std::collections::{BTreeMap, BTreeSet};
-    use std::io::{self, Cursor, Read};
+    use std::io;
     use std::sync::RwLock;
 
     #[derive(Debug, Default)]
@@ -218,7 +236,7 @@ pub(crate) mod mock {
             ))
         }
 
-        fn open_read(&self, path: &Utf8Path) -> io::Result<Box<dyn Read + Send>> {
+        fn open_read(&self, path: &Utf8Path) -> io::Result<super::FileReader> {
             let contents = self
                 .files
                 .read()
@@ -226,7 +244,7 @@ pub(crate) mod mock {
                 .get(path)
                 .cloned()
                 .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "file does not exist"))?;
-            Ok(Box::new(Cursor::new(contents)))
+            Ok(super::FileReader::Memory(std::io::Cursor::new(contents)))
         }
 
         fn create_dir_all(&self, path: &Utf8Path) -> io::Result<()> {
