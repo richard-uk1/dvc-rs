@@ -43,6 +43,7 @@ struct PostCheckoutArgs {
     _previous_head: OsString,
     #[arg(value_name = "NEW_HEAD")]
     _new_head: OsString,
+    /// Git passes 1 for a branch checkout and 0 for a file checkout.
     #[arg(value_name = "BRANCH_CHECKOUT")]
     branch_checkout: String,
 }

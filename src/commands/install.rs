@@ -35,7 +35,7 @@ pub fn install_with_fs(
         .context("failed to resolve repository root")?;
     let hooks_path = configured_hooks_path(&repo_root)?;
 
-    // check all hook locations and bail if any already exist
+    // Check every target before writing so an existing hook cannot leave a partial install.
     for hook in HOOKS {
         let hook_path = hooks_path.join(hook);
         if filesystem
@@ -97,6 +97,7 @@ fn configured_hooks_path(repo_root: &Utf8Path) -> Result<Utf8PathBuf> {
             repo_root.join(configured)
         });
     }
+    // Git exits with status 1 when the optional setting is absent.
     if !output.status.code().is_some_and(|code| code == 1) {
         return Err(git_error("git config --get core.hooksPath", output));
     }

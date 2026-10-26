@@ -18,6 +18,9 @@ struct Output {
     path: String,
 }
 
+/// Restores outputs from the local cache after a branch checkout.
+///
+/// File-level checkouts are skipped; no remote data is fetched.
 pub fn post_checkout(repo_root: impl AsRef<Utf8Path>, is_branch_checkout: bool) -> Result<()> {
     post_checkout_with_fs(&StdFileSystem, repo_root, is_branch_checkout)
 }
@@ -56,6 +59,7 @@ fn post_checkout_with_fs(
                 .join(".dvc/cache/files/md5")
                 .join(&digest[..2])
                 .join(&digest[2..]);
+
             let destination = repo_root.join(&output_path);
             let parent = destination
                 .parent()
@@ -64,6 +68,8 @@ fn post_checkout_with_fs(
                 .create_dir_all(parent)
                 .map_err(|error| io_error(IoOperation::CreateDirectory, parent, error))?;
 
+            // Check that path is inside the repo.
+            // Canonicalize to detect output paths that escape through a symlink.
             let resolved_parent = filesystem
                 .canonicalize(parent)
                 .map_err(|error| io_error(IoOperation::Canonicalize, parent, error))?;
