@@ -26,6 +26,7 @@ enum Command {
     GitHook(dvc_rs::commands::git_hook::GitHookArgs),
     Install,
     List,
+    Push(dvc_rs::commands::push::PushArgs),
     Remote(dvc_rs::commands::remote::RemoteArgs),
 }
 
@@ -79,6 +80,19 @@ fn run(cli: Cli) -> Result<()> {
             tracing::trace!(repository = %repo_root, "running list command");
             for path in dvc_rs::list_files(repo_root)? {
                 println!("{path}");
+            }
+        }
+        Command::Push(args) => {
+            tracing::trace!(repository = %repo_root, "running push command");
+            let result = args.run(&repo_root)?;
+            if result.uploaded == 0 && result.already_present == 0 {
+                tracing::info!("Everything is up to date.");
+            } else {
+                tracing::info!(
+                    uploaded = result.uploaded,
+                    already_present = result.already_present,
+                    "Push completed"
+                );
             }
         }
         Command::Install => {

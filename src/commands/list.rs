@@ -51,7 +51,7 @@ pub fn list_files_with_fs(
     Ok(paths.into_iter().map(Utf8PathBuf::from).collect())
 }
 
-fn collect_metadata_files(
+pub(crate) fn collect_metadata_files(
     filesystem: &impl FileSystem,
     repo_root: &Utf8Path,
     directory: &Utf8Path,

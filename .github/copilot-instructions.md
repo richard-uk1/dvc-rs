@@ -11,6 +11,7 @@ Run these commands from the repository root:
 - `cargo build` to compile the library.
 - `cargo run --bin dvc-rs -- add <file>` to add one file from the current directory.
 - `cargo run --bin dvc-rs -- list` to list tracked output paths from local `.dvc` metadata.
+- `cargo run --bin dvc-rs -- push [--remote <name>]` to push tracked cache objects to a configured local remote.
 - `cargo run --bin dvc-rs -- install` to install DVC-style Git hooks in a DVC Git repository.
 - `cargo run --bin dvc-rs -- remote --help` to manage DVC remote configuration.
 - `cargo run --bin dvc-rs -- git-hook --help` to inspect the Git hook command and its hook handlers.
@@ -27,6 +28,8 @@ Run these commands from the repository root:
 `src/commands/install.rs` installs `post-checkout`, `pre-commit`, and `pre-push` hooks plus the DVC merge-driver Git config. It uses the `FileSystem` abstraction for file operations, requires an existing `.dvc` directory, honors `core.hooksPath`, and refuses to overwrite any target hook. The installed hooks invoke `dvc-rs git-hook` subcommands.
 
 `src/commands/remote.rs` manages project and local DVC remote configuration (`add`, `default`, `list`, `modify`, `remove`, and `rename`). Local paths and `file://` locations are classified as local; documented cloud and self-hosted URL schemes are accepted as configuration stubs, but data transfer for those backends is not implemented.
+
+`src/commands/push.rs` pushes unique MD5 cache objects referenced by project `.dvc` metadata to the selected or default local remote. It skips objects already present and reports missing local cache objects; remote backends other than local paths and `file://` are not implemented.
 
 `src/config.rs` parses DVC INI config into named sections and writes the structured config back, similar to DVC's ConfigObj-based load/normalize/save flow. Remote sections use `[remote "name"]`; option and section lookups are case-insensitive.
 
