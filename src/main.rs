@@ -1,7 +1,6 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
 use clap::{ArgAction, Args, Parser, Subcommand};
-use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use tracing::level_filters::LevelFilter;
@@ -50,41 +49,28 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    let Command::Add(args) = cli.command;
-    tracing::trace!(file = %args.file.display(), "running add command");
-
-    let repo_root = match env::current_dir() {
-        Ok(path) => path,
+    match run(cli) {
+        Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("dvc: could not determine current directory: {error}");
-            return ExitCode::FAILURE;
-        }
-    };
-    let Ok(repo_root) = Utf8PathBuf::try_from(repo_root) else {
-        eprintln!("dvc: repository path is not valid UTF-8");
-        return ExitCode::FAILURE;
-    };
-    let Ok(path) = Utf8PathBuf::try_from(args.file) else {
-        eprintln!("dvc: input path is not valid UTF-8");
-        return ExitCode::FAILURE;
-    };
-    tracing::trace!(repository = %repo_root, file = %path, "dispatching add to library");
-
-    match dvc_rs::add_file(repo_root, path) {
-        Ok(added) => {
-            tracing::trace!(file = %added.path, md5 = %added.md5, "add command succeeded");
-            println!("Added {} (md5: {})", added.path, added.md5);
-            ExitCode::SUCCESS
-        }
-        Err(error) => {
-            tracing::trace!(error = %error, "add command failed");
-            eprintln!("dvc: {error}");
+            tracing::error!("{error:#}");
             ExitCode::FAILURE
         }
     }
 }
 
-fn run(args: Cli) -> Result<()> {
+fn run(cli: Cli) -> Result<()> {
+    let Command::Add(args) = cli.command;
+    tracing::trace!(file = %args.file.display(), "running add command");
+
+    let repo_root = std::env::current_dir().context("could not determine current directory")?;
+    let repo_root =
+        Utf8PathBuf::try_from(repo_root).context("repository path is not valid UTF-8")?;
+    let path = Utf8PathBuf::try_from(args.file).context("input path is not valid UTF-8")?;
+    tracing::trace!(repository = %repo_root, file = %path, "dispatching add to library");
+
+    let added = dvc_rs::add_file(repo_root, path)?;
+    tracing::trace!(file = %added.path, md5 = %added.md5, "add command succeeded");
+    println!("Added {} (md5: {})", added.path, added.md5);
     Ok(())
 }
 
