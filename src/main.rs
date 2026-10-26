@@ -23,6 +23,7 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     Add(AddArgs),
+    GitHook(dvc_rs::commands::git_hook::GitHookArgs),
     Install,
     List,
 }
@@ -83,6 +84,10 @@ fn run(cli: Cli) -> Result<()> {
             tracing::trace!(repository = %repo_root, "running install command");
             dvc_rs::commands::install::install(&repo_root)?;
             println!("Installed Git hooks.");
+        }
+        Command::GitHook(args) => {
+            tracing::trace!(repository = %repo_root, "running git-hook command");
+            args.run()?;
         }
     }
     Ok(())
