@@ -26,6 +26,12 @@ pub enum AddError {
         #[source]
         source: serde_yaml::Error,
     },
+    #[error("failed to parse metadata at {path}: {source}")]
+    MetadataParsing {
+        path: Utf8PathBuf,
+        #[source]
+        source: serde_yaml::Error,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -34,6 +40,8 @@ pub enum IoOperation {
     Canonicalize,
     #[error("inspect")]
     ReadMetadata,
+    #[error("read directory")]
+    ReadDirectory,
     #[error("open")]
     Open,
     #[error("read")]

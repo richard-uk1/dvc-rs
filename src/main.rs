@@ -23,6 +23,7 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     Add(AddArgs),
+    List,
 }
 
 #[derive(Debug, Args)]
@@ -59,18 +60,25 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<()> {
-    let Command::Add(args) = cli.command;
-    tracing::trace!(file = %args.file.display(), "running add command");
-
     let repo_root = std::env::current_dir().context("could not determine current directory")?;
     let repo_root =
         Utf8PathBuf::try_from(repo_root).context("repository path is not valid UTF-8")?;
-    let path = Utf8PathBuf::try_from(args.file).context("input path is not valid UTF-8")?;
-    tracing::trace!(repository = %repo_root, file = %path, "dispatching add to library");
-
-    let added = dvc_rs::add_file(repo_root, path)?;
-    tracing::trace!(file = %added.path, md5 = %added.md5, "add command succeeded");
-    println!("Added {} (md5: {})", added.path, added.md5);
+    match cli.command {
+        Command::Add(args) => {
+            tracing::trace!(file = %args.file.display(), "running add command");
+            let path = Utf8PathBuf::try_from(args.file).context("input path is not valid UTF-8")?;
+            tracing::trace!(repository = %repo_root, file = %path, "dispatching add to library");
+            let added = dvc_rs::add_file(repo_root, path)?;
+            tracing::trace!(file = %added.path, md5 = %added.md5, "add command succeeded");
+            println!("Added {} (md5: {})", added.path, added.md5);
+        }
+        Command::List => {
+            tracing::trace!(repository = %repo_root, "running list command");
+            for path in dvc_rs::list_files(repo_root)? {
+                println!("{path}");
+            }
+        }
+    }
     Ok(())
 }
 

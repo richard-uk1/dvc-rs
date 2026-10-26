@@ -10,6 +10,7 @@ Run these commands from the repository root:
 
 - `cargo build` to compile the library.
 - `cargo run -- add <file>` to add one file from the current directory.
+- `cargo run -- list` to list tracked output paths from local `.dvc` metadata.
 - Use `-v`/`--verbose` to increase logging (`-vv` enables trace); use `-q`/`--quiet` to decrease it (`-qqq` disables logs). Each repeated flag shifts the log level by one step from `info`; matching quiet and verbose counts cancel.
 - `cargo test` to run the test suite; use `cargo test <test_name>` to run matching tests.
 - `cargo fmt --check` to check formatting.
@@ -17,8 +18,8 @@ Run these commands from the repository root:
 
 ## Architecture and conventions
 
-`src/lib.rs` owns the add operation and uses Camino UTF-8 path types throughout its public API: it validates that the input is a regular file inside the supplied repository root, hashes its raw contents with DVC's default MD5 algorithm, copies it into `.dvc/cache/files/md5/<first-two-hash-chars>/<remaining-hash>`, and writes a YAML `<file>.dvc` metadata file. The original file stays in place. The `.dvc/.gitignore` file excludes the generated cache while leaving metadata trackable.
+`src/commands/add.rs` implements file addition; `src/commands/list.rs` reads output paths from recursively discovered `.dvc` metadata, skipping `.git` and `.dvc` internals, and returns sorted unique paths. Both use Camino UTF-8 paths and shared repository-root canonicalization from `src/utils.rs`. The crate root re-exports the add/list APIs. Add hashes raw contents with DVC's default MD5 algorithm, copies into `.dvc/cache/files/md5/<first-two-hash-chars>/<remaining-hash>`, and writes a YAML `<file>.dvc` metadata file while leaving the original in place. The `.dvc/.gitignore` file excludes the generated cache while leaving metadata trackable.
 
 `src/main.rs` defines CLI arguments with Clap derive, initializes the tracing subscriber in `main` using repeatable quiet/verbose flags (defaulting to `info`), and delegates command execution to `run`. `main` logs command errors through `tracing` before returning a failure exit code. The library logs add start and completion at `info`, with operational details at `trace`; never log file contents.
 
-`src/error.rs` defines the public `AddError` and `IoOperation` types. `src/lib.rs` re-exports them and owns file-add behavior. Keep failure categories typed and retain underlying errors as sources rather than collapsing them into strings.
+`src/error.rs` defines the public `AddError` and `IoOperation` types. Keep failure categories typed and retain underlying errors as sources rather than collapsing them into strings.
