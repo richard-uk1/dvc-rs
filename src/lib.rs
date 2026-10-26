@@ -36,10 +36,10 @@ pub fn add_file(
     repo_root: impl AsRef<Utf8Path>,
     input: impl AsRef<Utf8Path>,
 ) -> Result<AddedFile, AddError> {
-    trace!(
+    tracing::info!(
         repository = %repo_root.as_ref(),
         input = %input.as_ref(),
-        "starting add"
+        "adding file"
     );
     let repo_root = fs::canonicalize(repo_root.as_ref())
         .map_err(|error| io_error(IoOperation::Canonicalize, repo_root.as_ref(), error))?;
@@ -156,10 +156,12 @@ pub fn add_file(
         md5: hash,
         size,
     };
-    trace!(
+    tracing::info!(
         path = %added.path,
         cache = %added.cache_path,
         metadata = %added.metadata_path,
+        md5 = %added.md5,
+        size = added.size,
         "file added"
     );
     Ok(added)
