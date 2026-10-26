@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod error;
+pub mod fs;
 mod utils;
 
 pub use commands::add::{add_file, AddedFile};
