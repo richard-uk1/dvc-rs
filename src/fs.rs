@@ -1,33 +1,58 @@
+//! File abstractions that can be mocked for testing.
+
 use camino::{Utf8Path, Utf8PathBuf};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 
+/// Basic file attributes exposed by [`FileSystem::metadata`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileMetadata {
+    /// Whether the path refers to a regular file.
     pub is_file: bool,
+    /// Whether the path refers to a directory.
     pub is_dir: bool,
+    /// The file size in bytes, or zero for directories.
     pub len: u64,
 }
 
+/// A file or directory returned by [`FileSystem::read_dir`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirectoryEntry {
+    /// Full path to the entry.
     pub path: Utf8PathBuf,
+    /// Whether the entry is a regular file.
     pub is_file: bool,
+    /// Whether the entry is a directory.
     pub is_dir: bool,
 }
 
+/// Abstraction over filesystem operations used by commands.
+///
+/// Implementations return UTF-8 paths and report filesystem failures as
+/// [`io::Error`]. This trait allows command logic to be tested with an
+/// in-memory filesystem.
 pub trait FileSystem {
+    /// Resolve a path to its canonical absolute form.
     fn canonicalize(&self, path: &Utf8Path) -> io::Result<Utf8PathBuf>;
+    /// Read basic attributes for a path.
     fn metadata(&self, path: &Utf8Path) -> io::Result<FileMetadata>;
+    /// Open a file for reading.
     fn open_read(&self, path: &Utf8Path) -> io::Result<Box<dyn Read + Send>>;
+    /// Create a directory and any missing parent directories.
     fn create_dir_all(&self, path: &Utf8Path) -> io::Result<()>;
+    /// Return whether a path exists.
     fn exists(&self, path: &Utf8Path) -> io::Result<bool>;
+    /// Copy a file, returning the number of bytes copied.
     fn copy(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<u64>;
+    /// Create or truncate a file and write all provided contents.
     fn write(&self, path: &Utf8Path, contents: &[u8]) -> io::Result<()>;
+    /// Mark a file as executable where the platform supports file permissions.
     fn set_executable(&self, path: &Utf8Path) -> io::Result<()>;
+    /// Return the immediate entries in a directory.
     fn read_dir(&self, path: &Utf8Path) -> io::Result<Vec<DirectoryEntry>>;
 }
 
+/// Filesystem implementation backed by the operating system.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct StdFileSystem;
 
