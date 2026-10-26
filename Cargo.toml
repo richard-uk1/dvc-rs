@@ -1,0 +1,18 @@
+[package]
+name = "dvc-rs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "dvc_rs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "dvc"
+path = "src/main.rs"
+
+[dependencies]
+md-5 = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+thiserror = "2"
