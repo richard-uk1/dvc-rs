@@ -1,66 +1,13 @@
+pub mod error;
+
+pub use error::{AddError, IoOperation};
+
+use crate::error::io_error;
+use camino::{Utf8Path, Utf8PathBuf};
 use md5::{Digest, Md5};
 use serde::Serialize;
-use std::ffi::OsString;
 use std::fs::{self, File};
-use std::io::{self, Read};
-use std::path::{Path, PathBuf};
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum AddError {
-    #[error("{operation} {path}: {source}")]
-    Io {
-        operation: IoOperation,
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
-    #[error("file {file} is outside repository root {repository_root}")]
-    OutsideRepository {
-        file: PathBuf,
-        repository_root: PathBuf,
-    },
-    #[error("only regular files can be added: {0}")]
-    NotRegularFile(PathBuf),
-    #[error("file path is not valid UTF-8: {0}")]
-    NonUtf8Path(PathBuf),
-    #[error("failed to serialize metadata for {path}: {source}")]
-    MetadataSerialization {
-        path: PathBuf,
-        #[source]
-        source: serde_yaml::Error,
-    },
-}
-
-#[derive(Debug, Error)]
-pub enum IoOperation {
-    #[error("resolve")]
-    Canonicalize,
-    #[error("inspect")]
-    ReadMetadata,
-    #[error("open")]
-    Open,
-    #[error("read")]
-    Read,
-    #[error("create directory for")]
-    CreateDirectory,
-    #[error("check")]
-    CheckPath,
-    #[error("copy to")]
-    Copy,
-    #[error("create")]
-    Create,
-    #[error("write")]
-    Write,
-}
-
-fn io_error(operation: IoOperation, path: impl Into<PathBuf>, source: io::Error) -> AddError {
-    AddError::Io {
-        operation,
-        path: path.into(),
-        source,
-    }
-}
+use std::io::Read;
 
 #[derive(Debug, Serialize)]
 struct Metadata {
@@ -77,19 +24,20 @@ struct Output {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct AddedFile {
-    pub path: PathBuf,
-    pub metadata_path: PathBuf,
-    pub cache_path: PathBuf,
+    pub path: Utf8PathBuf,
+    pub metadata_path: Utf8PathBuf,
+    pub cache_path: Utf8PathBuf,
     pub md5: String,
     pub size: u64,
 }
 
 pub fn add_file(
-    repo_root: impl AsRef<Path>,
-    input: impl AsRef<Path>,
+    repo_root: impl AsRef<Utf8Path>,
+    input: impl AsRef<Utf8Path>,
 ) -> Result<AddedFile, AddError> {
     let repo_root = fs::canonicalize(repo_root.as_ref())
         .map_err(|error| io_error(IoOperation::Canonicalize, repo_root.as_ref(), error))?;
+    let repo_root = Utf8PathBuf::try_from(repo_root).map_err(|_| AddError::NonUtf8Path)?;
     let input = input.as_ref();
     let source_candidate = if input.is_absolute() {
         input.to_path_buf()
@@ -98,6 +46,7 @@ pub fn add_file(
     };
     let source = fs::canonicalize(&source_candidate)
         .map_err(|error| io_error(IoOperation::Canonicalize, &source_candidate, error))?;
+    let source = Utf8PathBuf::try_from(source).map_err(|_| AddError::NonUtf8Path)?;
     let relative_path =
         source
             .strip_prefix(&repo_root)
@@ -110,10 +59,7 @@ pub fn add_file(
     if !file_type.is_file() {
         return Err(AddError::NotRegularFile(source));
     }
-    let metadata_path_text = relative_path
-        .to_str()
-        .ok_or_else(|| AddError::NonUtf8Path(relative_path.to_path_buf()))?;
-    let metadata_path_text = metadata_path_text.replace('\\', "/");
+    let metadata_path_text = relative_path.as_str().replace('\\', "/");
 
     let mut hasher = Md5::new();
     let mut file =
@@ -160,9 +106,7 @@ pub fn add_file(
             .map_err(|error| io_error(IoOperation::Write, &gitignore, error))?;
     }
 
-    let mut metadata_path = OsString::from(source.as_os_str());
-    metadata_path.push(".dvc");
-    let metadata_path = PathBuf::from(metadata_path);
+    let metadata_path = Utf8PathBuf::from(format!("{source}.dvc"));
     let metadata = Metadata {
         outs: vec![Output {
             md5: hash.clone(),
@@ -198,24 +142,25 @@ pub fn add_file(
 #[cfg(test)]
 mod tests {
     use super::{add_file, AddError, IoOperation};
+    use camino::{Utf8Path, Utf8PathBuf};
     use std::fs;
-    use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(0);
 
-    struct TempDir(PathBuf);
+    struct TempDir(Utf8PathBuf);
 
     impl TempDir {
         fn new() -> Self {
             let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
-            let path =
-                std::env::temp_dir().join(format!("dvc-rs-test-{}-{id}", std::process::id()));
+            let path = Utf8PathBuf::try_from(std::env::temp_dir())
+                .expect("temporary directory path is UTF-8")
+                .join(format!("dvc-rs-test-{}-{id}", std::process::id()));
             fs::create_dir_all(&path).unwrap();
             Self(path)
         }
 
-        fn path(&self) -> &Path {
+        fn path(&self) -> &Utf8Path {
             &self.0
         }
     }
@@ -236,10 +181,10 @@ mod tests {
 
         assert_eq!(added.md5, "5eb63bbbe01eeed093cb22bb8f5acdc3");
         assert_eq!(added.size, 11);
-        assert_eq!(added.path, PathBuf::from("data/input.txt"));
+        assert_eq!(added.path, Utf8PathBuf::from("data/input.txt"));
         assert_eq!(
             added.cache_path,
-            PathBuf::from(".dvc/cache/files/md5/5e/b63bbbe01eeed093cb22bb8f5acdc3")
+            Utf8PathBuf::from(".dvc/cache/files/md5/5e/b63bbbe01eeed093cb22bb8f5acdc3")
         );
         assert_eq!(
             fs::read(repo.path().join(&added.cache_path)).unwrap(),
