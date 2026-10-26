@@ -87,7 +87,7 @@ fn run(cli: Cli) -> Result<()> {
         }
         Command::GitHook(args) => {
             tracing::trace!(repository = %repo_root, "running git-hook command");
-            args.run()?;
+            args.run(&repo_root)?;
         }
     }
     Ok(())

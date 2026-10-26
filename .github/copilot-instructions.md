@@ -13,6 +13,7 @@ Run these commands from the repository root:
 - `cargo run --bin dvc-rs -- list` to list tracked output paths from local `.dvc` metadata.
 - `cargo run --bin dvc-rs -- install` to install DVC-style Git hooks in a DVC Git repository.
 - `cargo run --bin dvc-rs -- git-hook --help` to inspect the Git hook command and its hook handlers.
+- `cargo run --bin dvc-rs -- git-hook post-checkout <PREVIOUS_HEAD> <NEW_HEAD> <BRANCH_CHECKOUT>` to restore cached outputs after a branch checkout.
 - Use `-v`/`--verbose` to increase logging (`-vv` enables trace); use `-q`/`--quiet` to decrease it (`-qqq` disables logs). Each repeated flag shifts the log level by one step from `info`; matching quiet and verbose counts cancel.
 - `cargo test` to run the test suite; use `cargo test <test_name>` to run matching tests.
 - `cargo fmt --check` to check formatting.
@@ -24,7 +25,7 @@ Run these commands from the repository root:
 
 `src/commands/install.rs` installs `post-checkout`, `pre-commit`, and `pre-push` hooks plus the DVC merge-driver Git config. It uses the `FileSystem` abstraction for file operations, requires an existing `.dvc` directory, honors `core.hooksPath`, and refuses to overwrite any target hook. The installed hooks invoke `dvc-rs git-hook` subcommands.
 
-`src/commands/git_hook.rs` parses the installed hook arguments for `post-checkout`, `pre-commit`, `pre-push`, and `merge-driver`. These handlers currently return explicit not-implemented errors until their DVC operations are available.
+`src/commands/git_hook/post_checkout.rs` restores outputs from the local MD5 cache after a branch `post-checkout`, skipping file-level checkouts and rejecting output paths outside the repository. The `pre-commit`, `pre-push`, and `merge-driver` handlers in `src/commands/git_hook/mod.rs` remain explicit not-implemented stubs.
 
 `src/main.rs` defines CLI arguments with Clap derive, initializes the tracing subscriber in `main` using repeatable quiet/verbose flags (defaulting to `info`), and delegates command execution to `run`. `main` logs command errors through `tracing` before returning a failure exit code. The library logs add start and completion at `info`, with operational details at `trace`; never log file contents.
 
