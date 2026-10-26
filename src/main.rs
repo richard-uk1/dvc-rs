@@ -1,21 +1,33 @@
 use camino::Utf8PathBuf;
+use clap::{Args, Parser, Subcommand};
 use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-fn main() -> ExitCode {
-    let mut args = env::args_os().skip(1);
-    let command = args.next();
-    let path = args.next();
+#[derive(Debug, Parser)]
+#[command(
+    name = "dvc",
+    version,
+    about = "Track data files with DVC-style metadata"
+)]
+struct Cli {
+    #[command(subcommand)]
+    command: Command,
+}
 
-    if command.as_deref() != Some(std::ffi::OsStr::new("add")) || args.next().is_some() {
-        eprintln!("Usage: dvc add <file>");
-        return ExitCode::from(2);
-    }
-    let Some(path) = path else {
-        eprintln!("Usage: dvc add <file>");
-        return ExitCode::from(2);
-    };
+#[derive(Debug, Subcommand)]
+enum Command {
+    Add(AddArgs),
+}
+
+#[derive(Debug, Args)]
+struct AddArgs {
+    file: PathBuf,
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let Command::Add(args) = cli.command;
 
     let repo_root = match env::current_dir() {
         Ok(path) => path,
@@ -28,7 +40,7 @@ fn main() -> ExitCode {
         eprintln!("dvc: repository path is not valid UTF-8");
         return ExitCode::FAILURE;
     };
-    let Ok(path) = Utf8PathBuf::try_from(PathBuf::from(path)) else {
+    let Ok(path) = Utf8PathBuf::try_from(args.file) else {
         eprintln!("dvc: input path is not valid UTF-8");
         return ExitCode::FAILURE;
     };
