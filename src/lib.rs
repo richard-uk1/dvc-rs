@@ -8,6 +8,7 @@ use md5::{Digest, Md5};
 use serde::Serialize;
 use std::fs::{self, File};
 use std::io::Read;
+use tracing::trace;
 
 #[derive(Debug, Serialize)]
 struct Metadata {
@@ -35,6 +36,11 @@ pub fn add_file(
     repo_root: impl AsRef<Utf8Path>,
     input: impl AsRef<Utf8Path>,
 ) -> Result<AddedFile, AddError> {
+    trace!(
+        repository = %repo_root.as_ref(),
+        input = %input.as_ref(),
+        "starting add"
+    );
     let repo_root = fs::canonicalize(repo_root.as_ref())
         .map_err(|error| io_error(IoOperation::Canonicalize, repo_root.as_ref(), error))?;
     let repo_root = Utf8PathBuf::try_from(repo_root).map_err(|_| AddError::NonUtf8Path)?;
@@ -47,6 +53,7 @@ pub fn add_file(
     let source = fs::canonicalize(&source_candidate)
         .map_err(|error| io_error(IoOperation::Canonicalize, &source_candidate, error))?;
     let source = Utf8PathBuf::try_from(source).map_err(|_| AddError::NonUtf8Path)?;
+    trace!(source = %source, "resolved input path");
     let relative_path =
         source
             .strip_prefix(&repo_root)
@@ -59,6 +66,7 @@ pub fn add_file(
     if !file_type.is_file() {
         return Err(AddError::NotRegularFile(source));
     }
+    trace!(source = %source, size = file_type.len(), "validated input file");
     let metadata_path_text = relative_path.as_str().replace('\\', "/");
 
     let mut hasher = Md5::new();
@@ -76,6 +84,7 @@ pub fn add_file(
     }
     let hash = format!("{:x}", hasher.finalize());
     let size = file_type.len();
+    trace!(source = %source, md5 = %hash, size, "computed file hash");
 
     let dvc_dir = repo_root.join(".dvc");
     let cache_path = dvc_dir
@@ -91,8 +100,16 @@ pub fn add_file(
         .try_exists()
         .map_err(|error| io_error(IoOperation::CheckPath, &cache_path, error))?;
     if source != cache_path && !cache_exists {
+        trace!(source = %source, cache = %cache_path, "copying file into cache");
         fs::copy(&source, &cache_path)
             .map_err(|error| io_error(IoOperation::Copy, &cache_path, error))?;
+    } else {
+        trace!(
+            source = %source,
+            cache = %cache_path,
+            cache_exists,
+            "cache copy not required"
+        );
     }
 
     let gitignore = dvc_dir.join(".gitignore");
@@ -102,6 +119,7 @@ pub fn add_file(
         .try_exists()
         .map_err(|error| io_error(IoOperation::CheckPath, &gitignore, error))?;
     if !gitignore_exists {
+        trace!(path = %gitignore, "creating cache gitignore");
         fs::write(&gitignore, "/cache/\n")
             .map_err(|error| io_error(IoOperation::Write, &gitignore, error))?;
     }
@@ -115,6 +133,7 @@ pub fn add_file(
             path: metadata_path_text,
         }],
     };
+    trace!(path = %metadata_path, "writing DVC metadata");
     let metadata_file = File::create(&metadata_path)
         .map_err(|error| io_error(IoOperation::Create, &metadata_path, error))?;
     serde_yaml::to_writer(metadata_file, &metadata).map_err(|source| {
@@ -124,7 +143,7 @@ pub fn add_file(
         }
     })?;
 
-    Ok(AddedFile {
+    let added = AddedFile {
         path: relative_path.to_path_buf(),
         metadata_path: metadata_path
             .strip_prefix(&repo_root)
@@ -136,7 +155,14 @@ pub fn add_file(
             .to_path_buf(),
         md5: hash,
         size,
-    })
+    };
+    trace!(
+        path = %added.path,
+        cache = %added.cache_path,
+        metadata = %added.metadata_path,
+        "file added"
+    );
+    Ok(added)
 }
 
 #[cfg(test)]
