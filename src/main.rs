@@ -26,6 +26,7 @@ enum Command {
     GitHook(dvc_rs::commands::git_hook::GitHookArgs),
     Install,
     List,
+    Remote(dvc_rs::commands::remote::RemoteArgs),
 }
 
 #[derive(Debug, Args)]
@@ -87,6 +88,10 @@ fn run(cli: Cli) -> Result<()> {
         }
         Command::GitHook(args) => {
             tracing::trace!(repository = %repo_root, "running git-hook command");
+            args.run(&repo_root)?;
+        }
+        Command::Remote(args) => {
+            tracing::trace!(repository = %repo_root, "running remote command");
             args.run(&repo_root)?;
         }
     }

@@ -1,4 +1,5 @@
 pub mod commands;
+mod config;
 pub mod error;
 pub mod fs;
 mod utils;
