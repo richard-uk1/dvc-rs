@@ -5,6 +5,7 @@ use std::io::{self, Read, Write};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileMetadata {
     pub is_file: bool,
+    pub is_dir: bool,
     pub len: u64,
 }
 
@@ -23,6 +24,7 @@ pub trait FileSystem {
     fn exists(&self, path: &Utf8Path) -> io::Result<bool>;
     fn copy(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<u64>;
     fn write(&self, path: &Utf8Path, contents: &[u8]) -> io::Result<()>;
+    fn set_executable(&self, path: &Utf8Path) -> io::Result<()>;
     fn read_dir(&self, path: &Utf8Path) -> io::Result<Vec<DirectoryEntry>>;
 }
 
@@ -40,6 +42,7 @@ impl FileSystem for StdFileSystem {
         let metadata = fs::metadata(path)?;
         Ok(FileMetadata {
             is_file: metadata.is_file(),
+            is_dir: metadata.is_dir(),
             len: metadata.len(),
         })
     }
@@ -63,6 +66,22 @@ impl FileSystem for StdFileSystem {
     fn write(&self, path: &Utf8Path, contents: &[u8]) -> io::Result<()> {
         let mut file = File::create(path)?;
         file.write_all(contents)
+    }
+
+    fn set_executable(&self, path: &Utf8Path) -> io::Result<()> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mut permissions = fs::metadata(path)?.permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(path, permissions)
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = path;
+            Ok(())
+        }
     }
 
     fn read_dir(&self, path: &Utf8Path) -> io::Result<Vec<DirectoryEntry>> {
@@ -98,6 +117,7 @@ pub(crate) mod mock {
     pub(crate) struct MockFileSystem {
         files: RwLock<BTreeMap<Utf8PathBuf, Vec<u8>>>,
         directories: RwLock<BTreeSet<Utf8PathBuf>>,
+        executable_files: RwLock<BTreeSet<Utf8PathBuf>>,
     }
 
     impl MockFileSystem {
@@ -129,6 +149,13 @@ pub(crate) mod mock {
         pub(crate) fn read_file(&self, path: impl AsRef<Utf8Path>) -> Option<Vec<u8>> {
             self.files.read().unwrap().get(path.as_ref()).cloned()
         }
+
+        pub(crate) fn is_executable(&self, path: impl AsRef<Utf8Path>) -> bool {
+            self.executable_files
+                .read()
+                .unwrap()
+                .contains(path.as_ref())
+        }
     }
 
     impl FileSystem for MockFileSystem {
@@ -149,12 +176,14 @@ pub(crate) mod mock {
             if let Some(contents) = self.files.read().unwrap().get(path) {
                 return Ok(FileMetadata {
                     is_file: true,
+                    is_dir: false,
                     len: contents.len() as u64,
                 });
             }
             if self.directories.read().unwrap().contains(path) {
                 return Ok(FileMetadata {
                     is_file: false,
+                    is_dir: true,
                     len: 0,
                 });
             }
@@ -207,6 +236,21 @@ pub(crate) mod mock {
                 .unwrap()
                 .insert(path.to_path_buf(), contents.to_vec());
             Ok(())
+        }
+
+        fn set_executable(&self, path: &Utf8Path) -> io::Result<()> {
+            if self.files.read().unwrap().contains_key(path) {
+                self.executable_files
+                    .write()
+                    .unwrap()
+                    .insert(path.to_path_buf());
+                Ok(())
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "file does not exist",
+                ))
+            }
         }
 
         fn read_dir(&self, path: &Utf8Path) -> io::Result<Vec<DirectoryEntry>> {

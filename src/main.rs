@@ -7,7 +7,7 @@ use tracing::level_filters::LevelFilter;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "dvc",
+    name = "dvc-rs",
     version,
     about = "Track data files with DVC-style metadata"
 )]
@@ -23,6 +23,7 @@ struct Cli {
 #[derive(Debug, Subcommand)]
 enum Command {
     Add(AddArgs),
+    Install,
     List,
 }
 
@@ -46,7 +47,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let level = log_level(cli.quiet, cli.verbose);
     if let Err(error) = tracing_subscriber::fmt().with_max_level(level).try_init() {
-        eprintln!("dvc: failed to initialize tracing: {error}");
+        eprintln!("dvc-rs: failed to initialize tracing: {error}");
         return ExitCode::FAILURE;
     }
 
@@ -77,6 +78,11 @@ fn run(cli: Cli) -> Result<()> {
             for path in dvc_rs::list_files(repo_root)? {
                 println!("{path}");
             }
+        }
+        Command::Install => {
+            tracing::trace!(repository = %repo_root, "running install command");
+            dvc_rs::commands::install::install(&repo_root)?;
+            println!("Installed Git hooks.");
         }
     }
     Ok(())

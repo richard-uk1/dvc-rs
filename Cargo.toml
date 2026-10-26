@@ -8,7 +8,7 @@ name = "dvc_rs"
 path = "src/lib.rs"
 
 [[bin]]
-name = "dvc"
+name = "dvc-rs"
 path = "src/main.rs"
 
 [dependencies]
