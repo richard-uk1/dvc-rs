@@ -1,3 +1,4 @@
+use anyhow::Result;
 use camino::Utf8PathBuf;
 use clap::{ArgAction, Args, Parser, Subcommand};
 use std::env;
@@ -81,6 +82,10 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+fn run(args: Cli) -> Result<()> {
+    Ok(())
 }
 
 #[cfg(test)]
